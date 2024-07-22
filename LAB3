@@ -1,0 +1,83 @@
+#download file
+wget -O SensorFile.zip https://github.com/dalgual/aidatasci/raw/master/data/bigdata/SensorFiles.zip
+
+unzip SensorFile.zip
+ls SensorFIles
+
+hdfs dfs -mkdir SensorFiles
+hdfs dfs -mkdir SensorFiles/hvac
+hdfs dfs -mkdir SensorFiles/building
+
+hdfs dfs -put HVAC.csv SensorFiles/hvac
+
+beeline;
+
+use bd0645;
+
+drop table if exists hvac2;
+
+create external table if not exists hvac2(
+    date string,
+    time string,
+    targettemp bigint,
+    actualtemp bigint,
+    system bigint,
+    systemage bigint,
+    buildingid bigint
+)
+row format delimited fields terminated by ','
+stored as textfile location '/user/bd0645/SensorFiles/hvac'
+tblproperties ('skip.header.line.count'='1');
+
+show tables;
+select * from hvac2 limit 10;
+
+describe hvac2;
+describe formatted hvac2;
+
+DROP TABLE IF EXISTS building2;
+
+CREATE EXTERNAL TABLE IF NOT EXISTS building2(
+    buildingid BIGINT,
+    buildingmgr STRING,
+    buildingage BIGINT,
+    hvacproduct STRING,
+    country STRING
+)
+ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+STORED AS TEXTFILE LOCATION '/user/bd0645/SensorFiles/building'
+TBLPROPERTIES ('skip.header.line.count'='1');
+
+DROP TABLE IF EXISTS hvac_temperatures2;
+
+CREATE TABLE hvac_temperatures2
+ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+STORED AS TEXTFILE LOCATION '/user/bd0645/SensorFiles/hvac_temperatures/'
+AS
+SELECT *, targettemp - actualtemp AS temp_diff,
+    IF((targettemp - actualtemp) > 5, 'COLD',
+    IF((targettemp - actualtemp) < -5, 'HOT', 'NORMAL')) AS temprange,
+    IF((targettemp - actualtemp) > 5, '1',
+    IF((targettemp - actualtemp) < -5,'1', 0)) AS extremetemp
+from hvac;
+
+DROP TABLE IF EXISTS hvac_building2;
+
+CREATE TABLE hvac_building
+ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+STORED AS TEXTFILE LOCATION '/user/bd0645/SensorFiles/hvac_building/'
+AS
+SELECT h.*, b.country, b.hvacproduct, b.buildingage, b.buildingmgr
+FROM building b JOIN hvac_temperatures h ON b.buildingid = h.buildingid;
+
+#download data to PC
+#pake terminal bash
+ssh bd0645@34.219.23.167
+
+hdfs dfs -ls SensorFiles/hvac_building
+hdfs dfs -get SensorFiles/hvac_building/000000_0
+
+ls -al
+
+#pake local terminal tanpa ssh
+scp bd0645@34.219.23.167:/home/bd0645/000000_0 000000_0.csv
